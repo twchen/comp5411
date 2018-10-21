@@ -30,7 +30,6 @@ void Deformer::setMesh(Mesh* mesh) {
 	buildSystemMat();
 }
 
-
 void Deformer::buildSystemMat() {
 	/*====== Programming Assignment 2 ======*/
 
@@ -45,9 +44,47 @@ void Deformer::buildSystemMat() {
 	/* Movements of the specified handle are already
 	/* recorded in Vertex::position()
 	/**********************************************/
+	int numVertices = mMesh->vertices().size();
+	int numConstraints = mRoiList.size();
+	mA = Eigen::SparseMatrix<double>(numVertices + numConstraints, numVertices);
+	mB = Eigen::MatrixX3d(numVertices + numConstraints, 3);
+	for (Vertex *vert : mMesh->vertices()) {
+		int i = vert->index();
+		OneRingVertex orv(vert);
+		Vertex *curr = nullptr;
+		std::vector<Vertex *> adjVertices;
+		while (curr = orv.nextVertex()) {
+			adjVertices.push_back(curr);
+		}
+		int n = adjVertices.size();
+		std::vector<double> weights(n);
+		double weightSum = 0;
+		for (int k = 0; k < n; ++k) {
+			const Eigen::Vector3f &prev = adjVertices[k]->position();
+			const Eigen::Vector3f &curr = adjVertices[(k + 1) % n]->position();
+			const Eigen::Vector3f &next = adjVertices[(k + 2) % n]->position();
+			double cot1 = triangleCot(vert->position(), prev, curr);
+			double cot2 = triangleCot(vert->position(), next, curr);
+			double weight = 0.5 * (cot1 + cot2);
+			weights[(k + 1) % n] = weight;
+			weightSum += weight;
+		}
+		Eigen::Vector3d delta_i = -vert->position().cast<double>();
+		for (int k = 0; k < n; ++k) {
+			int j = adjVertices[k]->index();
+			mA.insert(i, j) = weights[k] / weightSum;
+			delta_i += weights[k] / weightSum * adjVertices[k]->position().cast<double>();
+		}
+		mA.insert(i, i) = -1;
+		mB.row(i) = delta_i;
+	}
 
-	Eigen::SparseMatrix< double > systemMat;
+	for (int k = 0; k < numConstraints; ++k) {
+		int i = mRoiList[k]->index();
+		mA.insert(numVertices + k, i) = 1;
+	}
 
+	Eigen::SparseMatrix< double > systemMat = mA.transpose() * mA;
 	/*====== Programming Assignment 2 ======*/
 
 	// Please refer to the following link for the usage of sparse linear system solvers in Eigen
@@ -89,6 +126,23 @@ void Deformer::deform() {
 	// Please refer to the following link for the usage of sparse linear system solvers in Eigen
 	// https://eigen.tuxfamily.org/dox/group__TopicSparseSystems.html
 
+	int numVertices = mMesh->vertices().size();
+	int numConstraints = mRoiList.size();
 
+	for (int k = 0; k < numConstraints; ++k) {
+		mB.row(numVertices + k) = mRoiList[k]->position().cast<double>();
+	}
+	Eigen::MatrixX3f newPositions(numVertices, 3);
+	for (int d = 0; d < 3; ++d) {
+		Eigen::VectorXd rhs = mA.transpose() * mB.col(d);
+		Eigen::VectorXd x = mCholeskySolver->solve(rhs);
+		newPositions.col(d) = x.cast<float>();
+	}
+
+	for (Vertex *vert : mMesh->vertices()) {
+		int i = vert->index();
+		Eigen::Vector3f newPosition = newPositions.row(i);
+		vert->setPosition(newPosition);
+	}
 	/*====== Programming Assignment 2 ======*/
 }

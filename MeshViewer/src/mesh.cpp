@@ -573,14 +573,51 @@ void Mesh::computeVertexNormals() {
 	/**********************************************/
 
 	/*====== Programming Assignment 0 ======*/
+	for (Vertex* vert : mVertexList) {
+		Eigen::Vector3f vertNormal = Eigen::Vector3f::Zero();
 
+		std::vector< HEdge* > adjHEdgeList;
+		OneRingHEdge orhe(vert);
+		HEdge* curr = nullptr;
+		while (curr = orhe.nextHEdge()) {
+			adjHEdgeList.push_back(curr);
+		}
+
+		if (adjHEdgeList.size() >= 2) {
+			const Eigen::Vector3f& p0 = vert->position();
+			// Compute normals and areas of adjacent triangles.
+			std::vector< Eigen::Vector3f > adjNormals;
+			std::vector< double > adjAreas;
+			double areaSum = 0;
+			for (HEdge* adjHEdge : adjHEdgeList) {
+				if (!adjHEdge->isBoundary()) {
+					const Eigen::Vector3f& p1 = adjHEdge->end()->position();
+					const Eigen::Vector3f& p2 = adjHEdge->next()->end()->position();
+
+					adjNormals.push_back(triangleNormal(p0, p1, p2));
+
+					double area = triangleArea(p0, p1, p2);
+					adjAreas.push_back(area);
+					areaSum += area;
+				}
+			}
+			for (int aidx = 0; aidx < adjNormals.size(); ++aidx) {
+				vertNormal += adjNormals[aidx] * adjAreas[aidx] / areaSum;
+			}
+		}
+
+		vert->setNormal(vertNormal);
+	}
 	// Notify mesh shaders
 	setVertexNormalDirty(true);
 }
 
+static const double lambda = 1;
 
 void Mesh::umbrellaSmooth(bool cotangentWeights) {
 	/*====== Programming Assignment 1 ======*/
+	const int numVertices = mVertexList.size();
+	Eigen::MatrixX3f newPositions(numVertices, 3);
 
 	if (cotangentWeights) {
 		/**********************************************/
@@ -594,7 +631,37 @@ void Mesh::umbrellaSmooth(bool cotangentWeights) {
 		/* It is advised to double type to store the
 		/* weights to avoid numerical issues.
 		/**********************************************/
-
+		for (Vertex *vert : mVertexList) {
+			const Eigen::Vector3f &position = vert->position();
+			int i = vert->index();
+			Eigen::Vector3f sumOfNeighbors = Eigen::Vector3f::Zero();
+			std::vector<Vertex *> adjVertices;
+			OneRingVertex orv(vert);
+			Vertex *curr = nullptr;
+			while (curr = orv.nextVertex()) {
+				adjVertices.push_back(curr);
+			}
+			int n = adjVertices.size();
+			if (n > 2) {
+				double weightSum = 0;
+				for (int k = 0; k < n; ++k) {
+					const Eigen::Vector3f &prev = adjVertices[k]->position();
+					const Eigen::Vector3f &curr = adjVertices[(k + 1) % n]->position();
+					const Eigen::Vector3f &next = adjVertices[(k + 2) % n]->position();
+					double cot1 = triangleCot(position, prev, curr);
+					double cot2 = triangleCot(position, next, curr);
+					double weight = 0.5 * (cot1 + cot2);
+					sumOfNeighbors += weight * curr;
+					weightSum += weight;
+				}
+				Eigen::Vector3f delta = sumOfNeighbors / weightSum - position;
+				Eigen::Vector3f newPosition = position + lambda * delta;
+				newPositions.row(i) = newPosition;
+			}
+			else {
+				newPositions.row(i) = position;
+			}
+		}
 	}
 	else {
 		/**********************************************/
@@ -605,6 +672,24 @@ void Mesh::umbrellaSmooth(bool cotangentWeights) {
 		/* scheme for explicit mesh smoothing.
 		/**********************************************/
 
+		for (Vertex *vert : mVertexList) {
+			const Eigen::Vector3f &position = vert->position();
+			int i = vert->index();
+			Eigen::Vector3f sumOfNeighbors = Eigen::Vector3f::Zero();
+			OneRingVertex orv(vert);
+			Vertex *curr = nullptr;
+			while (curr = orv.nextVertex()) {
+				sumOfNeighbors += curr->position();
+			}
+			Eigen::Vector3f delta = sumOfNeighbors / vert->valence() - position;
+			Eigen::Vector3f newPosition = position + lambda * delta;
+			newPositions.row(i) = newPosition;
+		}
+
+	}
+
+	for (int i = 0; i < numVertices; ++i) {
+		mVertexList[i]->setPosition(newPositions.row(i));
 	}
 
 	/*====== Programming Assignment 1 ======*/
@@ -640,11 +725,40 @@ void Mesh::implicitUmbrellaSmooth(bool cotangentWeights) {
 		/* method.
 		/* Hint: https://en.wikipedia.org/wiki/Biconjugate_gradient_method
 		/**********************************************/
+
+		Eigen::SparseMatrix<float> At = A.transpose();
+		Eigen::VectorXf r, rc, p, pc;
+		r = rc = p = pc = b - A * x;
+		double prevDotProd = r.dot(rc);
+		for (int i = 0; i < maxIterations; ++i) {
+			double alpha = prevDotProd / ((A * p).dot(pc));
+			x += alpha * p;
+			Eigen::VectorXf error = A * x - b;
+			double ratio = error.norm() / b.norm();
+			if (ratio < errorTolerance) {
+				break;
+			}
+			r -= alpha * (A * p);
+			rc -= alpha * (At * pc);
+			double currDotProd = r.dot(rc);
+			double beta = currDotProd / prevDotProd;
+			p = r + beta * p;
+			pc = rc + beta * pc;
+			prevDotProd = currDotProd;
+		}
 	};
 
 	/* IMPORTANT:
 	/* Please refer to the following link about the sparse matrix construction in Eigen. */
 	/* http://eigen.tuxfamily.org/dox/group__TutorialSparse.html#title3 */
+	int numVertices = mVertexList.size();
+	Eigen::SparseMatrix<float> A(numVertices, numVertices);
+	Eigen::MatrixX3f oldPositions(numVertices, 3);
+	for (Vertex *vert : mVertexList) {
+		const Eigen::Vector3f &position = vert->position();
+		int i = vert->index();
+		oldPositions.row(i) = position;
+	}
 
 	if (cotangentWeights) {
 		/**********************************************/
@@ -660,7 +774,37 @@ void Mesh::implicitUmbrellaSmooth(bool cotangentWeights) {
 		/* It is advised to double type to store the
 		/* weights to avoid numerical issues.
 		/**********************************************/
+		for (Vertex *vert : mVertexList) {
+			const Eigen::Vector3f &position = vert->position();
+			OneRingVertex orv(vert);
+			Vertex *curr = nullptr;
+			std::vector<Vertex *> adjVertices;
+			while (curr = orv.nextVertex()) {
+				adjVertices.push_back(curr);
+			}
+			int n = adjVertices.size();
+			int i = vert->index();
+			if (n > 2) {
+				std::vector<double> weights(n);
+				double weightSum = 0;
+				for (int k = 0; k < n; ++k) {
+					const Eigen::Vector3f &prev = adjVertices[k]->position();
+					const Eigen::Vector3f &curr = adjVertices[(k + 1) % n]->position();
+					const Eigen::Vector3f &next = adjVertices[(k + 2) % n]->position();
+					double cot1 = triangleCot(position, prev, curr);
+					double cot2 = triangleCot(position, next, curr);
+					double weight = 0.5 * (cot1 + cot2);
+					weights[(k + 1) % n] = weight;
+					weightSum += weight;
+				}
 
+				for (int k = 0; k < n; ++k) {
+					int j = adjVertices[k]->index();
+					A.insert(i, j) = -lambda * weights[k] / weightSum;
+				}
+			}
+			A.insert(i, i) = 1 + lambda;
+		}
 
 	}
 	else {
@@ -673,7 +817,36 @@ void Mesh::implicitUmbrellaSmooth(bool cotangentWeights) {
 		/* the above fnConjugateGradient for solving
 		/* sparse linear systems.
 		/**********************************************/
+		for (Vertex *vert : mVertexList) {
+			OneRingVertex orv(vert);
+			Vertex *curr = nullptr;
+			std::vector<Vertex *> adjVertices;
+			while (curr = orv.nextVertex()) {
+				adjVertices.push_back(curr);
+			}
+			int i = vert->index();
+			int valence = adjVertices.size();
+			for (auto neighbor : adjVertices) {
+				int j = neighbor->index();
+				double weight = 1.0 / valence;
+				A.insert(i, j) = -lambda * weight;
+			}
+			A.insert(i, i) = 1 + lambda;
+		}
+	}
 
+	Eigen::MatrixX3f newPositions(numVertices, 3);
+	for (int d = 0; d < 3; ++d) {
+		Eigen::VectorXf x = Eigen::VectorXf::Zero(numVertices);
+		Eigen::VectorXf b = oldPositions.col(d);
+		fnConjugateGradient(A, b, 1000, 1e-6, x);
+		newPositions.col(d) = x;
+	}
+
+	for (Vertex *vert : mVertexList) {
+		int i = vert->index();
+		Eigen::Vector3f newPosition = newPositions.row(i);
+		vert->setPosition(newPosition);
 	}
 
 	/*====== Programming Assignment 1 ======*/

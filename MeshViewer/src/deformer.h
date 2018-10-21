@@ -27,6 +27,9 @@ private:
 
 	Mesh* mMesh;
 	std::vector< Vertex* > mRoiList;
+	// Let V be the vertices, mA * V = mB
+	Eigen::SparseMatrix<double> mA;
+	Eigen::MatrixX3d mB;
 	// Solver for pre-factorizing the system matrix of the deformation
 	Eigen::SimplicialLDLT< Eigen::SparseMatrix< double > >* mCholeskySolver;
 };
