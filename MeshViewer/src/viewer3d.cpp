@@ -410,6 +410,7 @@ Viewer3D::Viewer3D() : mWindow(nullptr),
 	mBgColor = Eigen::Vector4f(0.9f, 0.9f, 0.9f, 1.0f);
 	clearMesh();
 	mUseCotWeights = false;
+	mLambda = 0.5f;
 	mSmoothScheme = SmoothScheme::Explicit;
 	mHandleState = HandleState::Add;
 	mSelectedHandle = 0;
@@ -628,6 +629,21 @@ int Viewer3D::launchInit() {
 	mNGui->addVariable< SmoothScheme >("Scheme", mSmoothScheme)
 	     ->setItems({"Explicit", "Implicit"});
 	mNGui->addVariable("Cot. Weights", mUseCotWeights);
+
+	nanogui::TextBox *textBox = new nanogui::TextBox(mNGui->window());
+	textBox->setValue(std::to_string(mLambda).substr(0, 4));
+	textBox->setFontSize(mNGui->labelFontSize());
+
+	nanogui::Slider *slider = new nanogui::Slider(mNGui->window());
+	slider->setValue(mLambda);
+	slider->setRange(std::make_pair(0.0f, 1.0f));
+	slider->setCallback([textBox, this](float value) {
+		mLambda = (int)(value * 100) / 100.0f;
+		textBox->setValue(std::to_string(mLambda).substr(0, 4));
+	});
+	mNGui->addWidget("Lambda", textBox);
+	mNGui->addWidget("", slider);
+
 	mNGui->addButton("Update", [&]() { smoothMesh(); });
 
 	mNGui->addGroup("Deformation");
@@ -718,11 +734,11 @@ void Viewer3D::smoothMesh() {
 
 	switch (mSmoothScheme) {
 	case SmoothScheme::Implicit:
-		mMesh->implicitUmbrellaSmooth(mUseCotWeights);
+		mMesh->implicitUmbrellaSmooth(mLambda, mUseCotWeights);
 		break;
 	case SmoothScheme::Explicit:
 	default:
-		mMesh->umbrellaSmooth(mUseCotWeights);
+		mMesh->umbrellaSmooth(mLambda, mUseCotWeights);
 		break;
 	}
 }

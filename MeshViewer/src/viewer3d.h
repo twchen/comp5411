@@ -131,6 +131,7 @@ private:
 	ViewerData* mViewerData;
 	SmoothScheme mSmoothScheme;
 	bool mUseCotWeights;
+	float mLambda;
 	HandleState mHandleState;
 	int mSelectedHandle;
 	Deformer* mDeformer;

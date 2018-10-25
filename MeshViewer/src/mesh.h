@@ -208,8 +208,8 @@ public:
 	/*====== Programming Assignment 0 ======*/
 
 	/*====== Programming Assignment 1 ======*/
-	void umbrellaSmooth(bool cotangentWeights = true);
-	void implicitUmbrellaSmooth(bool cotangentWeights = true);
+	void umbrellaSmooth(float lambda, bool cotangentWeights = true);
+	void implicitUmbrellaSmooth(float lambda, bool cotangentWeights = true);
 	/*====== Programming Assignment 1 ======*/
 
 	/************************************************************************/

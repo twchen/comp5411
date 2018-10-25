@@ -612,9 +612,7 @@ void Mesh::computeVertexNormals() {
 	setVertexNormalDirty(true);
 }
 
-static const double lambda = 1;
-
-void Mesh::umbrellaSmooth(bool cotangentWeights) {
+void Mesh::umbrellaSmooth(float lambda, bool cotangentWeights) {
 	/*====== Programming Assignment 1 ======*/
 	const int numVertices = mVertexList.size();
 	Eigen::MatrixX3f newPositions(numVertices, 3);
@@ -699,7 +697,7 @@ void Mesh::umbrellaSmooth(bool cotangentWeights) {
 	setVertexPosDirty(true);
 }
 
-void Mesh::implicitUmbrellaSmooth(bool cotangentWeights) {
+void Mesh::implicitUmbrellaSmooth(float lambda, bool cotangentWeights) {
 	/*====== Programming Assignment 1 ======*/
 
 	/* A sparse linear system Ax=b solver using the conjugate gradient method. */
