@@ -26,6 +26,9 @@ public:
 	void setUseWireframe(bool b);
 	ShadeMode getShadeMode() const;
 	void setShadeMode(ShadeMode sm);
+	void updateNormals();
+	void computePerFaceNormals();
+	void computePerVertexNormals();
 
 	void setWindowSize(int w, int h);
 	void setMesh(Mesh* m, float aspectRatio);

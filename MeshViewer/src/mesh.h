@@ -181,8 +181,6 @@ public:
 	// Flags
 	bool isVertexPosDirty() const;
 	void setVertexPosDirty(bool b);
-	bool isVertexNormalDirty() const;
-	void setVertexNormalDirty(bool b);
 	bool isVertexColorDirty() const;
 	void setVertexColorDirty(bool b);
 
@@ -226,7 +224,6 @@ private:
 
 	// Some flags you DO NOT need to care about
 	bool mVertexPosFlag;
-	bool mVertexNormalFlag;
 	bool mVertexColorFlag;
 
 	/* DO NOT use the following variables in YOUR CODE */

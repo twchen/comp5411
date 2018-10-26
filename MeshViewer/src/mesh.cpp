@@ -255,7 +255,6 @@ bool Face::setValid(bool b) {
 
 Mesh::Mesh() {
 	mVertexPosFlag = true;
-	mVertexNormalFlag = true;
 	mVertexColorFlag = true;
 }
 
@@ -286,14 +285,6 @@ bool Mesh::isVertexPosDirty() const {
 
 void Mesh::setVertexPosDirty(bool b) {
 	mVertexPosFlag = b;
-}
-
-bool Mesh::isVertexNormalDirty() const {
-	return mVertexNormalFlag;
-}
-
-void Mesh::setVertexNormalDirty(bool b) {
-	mVertexNormalFlag = b;
 }
 
 bool Mesh::isVertexColorDirty() const {
@@ -608,8 +599,6 @@ void Mesh::computeVertexNormals() {
 
 		vert->setNormal(vertNormal);
 	}
-	// Notify mesh shaders
-	setVertexNormalDirty(true);
 }
 
 void Mesh::umbrellaSmooth(float lambda, bool cotangentWeights) {
@@ -692,7 +681,6 @@ void Mesh::umbrellaSmooth(float lambda, bool cotangentWeights) {
 
 	/*====== Programming Assignment 1 ======*/
 
-	computeVertexNormals();
 	// Notify mesh shaders
 	setVertexPosDirty(true);
 }
@@ -849,7 +837,6 @@ void Mesh::implicitUmbrellaSmooth(float lambda, bool cotangentWeights) {
 
 	/*====== Programming Assignment 1 ======*/
 
-	computeVertexNormals();
 	// Notify mesh shaders
 	setVertexPosDirty(true);
 }

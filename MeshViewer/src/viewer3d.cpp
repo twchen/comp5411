@@ -180,13 +180,53 @@ ViewerData::ShadeMode ViewerData::getShadeMode() const {
 }
 
 void ViewerData::setShadeMode(ShadeMode sm) {
+	if (mShadeMode == sm) return;
 	mShadeMode = sm;
+	updateNormals();
+}
+
+void ViewerData::updateNormals() {
 	if (mShadeMode == ShadeMode::FlatShade) {
+		computePerFaceNormals();
 		mMeshShader->bind();
 		mMeshShader->uploadAttrib("vin_normal", mMeshPerFaceNormals);
-	} else if (mShadeMode == ShadeMode::SmoothShade) {
+	}
+	else if (mShadeMode == ShadeMode::SmoothShade) {
+		computePerVertexNormals();
 		mMeshShader->bind();
 		mMeshShader->uploadAttrib("vin_normal", mMeshPerVertexNormals);
+	}
+}
+
+void ViewerData::computePerFaceNormals() {
+	const std::vector< Face* >& faces = mMesh->faces();
+	int numFaces = faces.size();
+	mMeshPerFaceNormals.resize(3, 3 * numFaces);
+	for (int fidx = 0; fidx < numFaces; ++fidx) {
+		Face* f = faces[fidx];
+		const Eigen::Vector3f& p0 = f->halfEdge()->start()->position();
+		const Eigen::Vector3f& p1 = f->halfEdge()->end()->position();
+		const Eigen::Vector3f& p2 = f->halfEdge()->next()->end()->position();
+		Eigen::Vector3f normal = ((p1 - p0).cross(p2 - p0)).normalized();
+		mMeshPerFaceNormals.col(fidx * 3 + 0) = normal;
+		mMeshPerFaceNormals.col(fidx * 3 + 1) = normal;
+		mMeshPerFaceNormals.col(fidx * 3 + 2) = normal;
+	}
+}
+
+void ViewerData::computePerVertexNormals() {
+	const std::vector< Face* >& faces = mMesh->faces();
+	int numFaces = faces.size();
+	mMeshPerVertexNormals.resize(3, 3 * numFaces);
+	mMesh->computeVertexNormals();
+	for (int fidx = 0; fidx < numFaces; ++fidx) {
+		Face* f = faces[fidx];
+		Vertex* v0 = f->halfEdge()->start();
+		Vertex* v1 = f->halfEdge()->end();
+		Vertex* v2 = f->halfEdge()->next()->end();
+		mMeshPerVertexNormals.col(fidx * 3 + 0) = v0->normal();
+		mMeshPerVertexNormals.col(fidx * 3 + 1) = v1->normal();
+		mMeshPerVertexNormals.col(fidx * 3 + 2) = v2->normal();
 	}
 }
 
@@ -219,7 +259,6 @@ void ViewerData::setMesh(Mesh* m, float aspectRatio) {
 	mWireframeShader->uploadAttrib("vin_flag", mWireframeFlags);
 
 	updateVertexInfo();
-	setShadeMode(getShadeMode());
 }
 
 void ViewerData::updateVertexInfo() {
@@ -231,8 +270,7 @@ void ViewerData::updateVertexInfo() {
 		const std::vector< Face* >& faces = mMesh->faces();
 		int numFaces = faces.size();
 
-		mMeshVertices = Eigen::Matrix3Xf::Zero(3, 3 * numFaces);
-		mMeshPerFaceNormals = Eigen::Matrix3Xf::Zero(3, 3 * numFaces);// Update per-face normal
+		mMeshVertices.resize(3, 3 * numFaces);
 		for (int fidx = 0; fidx < numFaces; ++fidx) {
 			Face* f = faces[fidx];
 			const Eigen::Vector3f& p0 = f->halfEdge()->start()->position();
@@ -243,14 +281,11 @@ void ViewerData::updateVertexInfo() {
 			mMeshVertices.col(fidx * 3 + 1) = p1;
 			mMeshVertices.col(fidx * 3 + 2) = p2;
 
-			Eigen::Vector3f normal = ((p1 - p0).cross(p2 - p0)).normalized();
-			mMeshPerFaceNormals.col(fidx * 3 + 0) = normal;
-			mMeshPerFaceNormals.col(fidx * 3 + 1) = normal;
-			mMeshPerFaceNormals.col(fidx * 3 + 2) = normal;
-
 		}
 		mMeshShader->bind();
 		mMeshShader->uploadAttrib("vin_position", mMeshVertices);
+
+		updateNormals();
 
 		const std::vector< HEdge* >& hedges = mMesh->edges();
 		int numHEdges = hedges.size();
@@ -272,24 +307,6 @@ void ViewerData::updateVertexInfo() {
 		mWireframeShader->uploadAttrib("vin_position", mWireframeVertices);
 
 		mMesh->setVertexPosDirty(false);
-	}
-
-	if (mMesh->isVertexNormalDirty()) {
-		const std::vector< Face* >& faces = mMesh->faces();
-		int numFaces = faces.size();
-		mMeshPerVertexNormals = Eigen::Matrix3Xf::Zero(3, 3 * numFaces);
-
-		for (int fidx = 0; fidx < numFaces; ++fidx) {
-			Face* f = faces[fidx];
-			Vertex* v0 = f->halfEdge()->start();
-			Vertex* v1 = f->halfEdge()->end();
-			Vertex* v2 = f->halfEdge()->next()->end();
-
-			mMeshPerVertexNormals.col(fidx * 3 + 0) = v0->normal();
-			mMeshPerVertexNormals.col(fidx * 3 + 1) = v1->normal();
-			mMeshPerVertexNormals.col(fidx * 3 + 2) = v2->normal();
-		}
-		mMesh->setVertexNormalDirty(false);
 	}
 
 	if (mMesh->isVertexColorDirty()) {
@@ -633,7 +650,6 @@ int Viewer3D::launchInit() {
 	nanogui::TextBox *textBox = new nanogui::TextBox(mNGui->window());
 	textBox->setValue(std::to_string(mLambda).substr(0, 4));
 	textBox->setFontSize(mNGui->labelFontSize());
-
 	nanogui::Slider *slider = new nanogui::Slider(mNGui->window());
 	slider->setValue(mLambda);
 	slider->setRange(std::make_pair(0.0f, 1.0f));
