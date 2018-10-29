@@ -524,7 +524,7 @@ bool Viewer3D::mouseMove(int mouse_x, int mouse_y) {
 			camera->orbitDown(orbitLen, diffY / 4.0);
 		}
 	} else if (mMouseDownButton == MouseButton::Right) {
-		if (diffX != 0 || diffY != 0) {
+		if ((diffX != 0 || diffY != 0) && mHandleState == HandleState::Move) {
 			moveHandle(lastX, lastY, mMouseCurrentX, mMouseCurrentY);
 		}
 	}
@@ -720,10 +720,11 @@ void Viewer3D::openDialogLoadMesh() {
 
 	clearMesh();
 
+	mSelectedHandle = 0;
+
 	mMesh = new Mesh();
 	mMesh->loadMeshFile(filename);
 	std::cout << "mesh " << filename << " loaded.\n";
-	mMesh->computeVertexNormals();
 	mViewerData->setMesh(mMesh, float(mWindowWidth) / float(mWindowHeight));
 
 	std::vector< int > stats = mMesh->collectMeshStats();
@@ -854,6 +855,7 @@ void Viewer3D::moveHandle(float lastMouseX, float lastMouseY,
 	Eigen::Vector3f offset2 = gluUnproject(mvpInv, viewport,
 	                                       Eigen::Vector3f(lastMouseX, lastMouseY, 0));
 	Eigen::Vector3f offset = (offset1 - offset2) * mViewerData->getSceneRadius() * 0.5;
+
 	for (Vertex* vert : vertices) {
 		if (vert->flag() == mSelectedHandle) {
 			vert->setPosition(vert->position() + offset);
